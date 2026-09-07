@@ -4,6 +4,5 @@ langchain-community==0.0.28
 langchain-text-splitters==0.0.1
 faiss-cpu==1.7.4
 pypdf==4.1.0
-python-dotenv==1.0.1
 sentence-transformers==2.5.1
 torch==2.2.1
