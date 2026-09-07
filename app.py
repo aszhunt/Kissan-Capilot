@@ -10,7 +10,7 @@ st.set_page_config(
     page_title="Kissan Copilot - ASZ", page_icon="🌾", layout="wide"
 )
 
-# Custom Green Executive Theme & Black Search/Input Bars Styling
+# Custom Green Executive Theme & Dark Purple High-Contrast Chat Box Styling
 st.markdown(
     """
     <style>
@@ -40,6 +40,18 @@ st.markdown(
     .stChatInput textarea::placeholder {
         color: #94a3b8 !important;
         -webkit-text-fill-color: #94a3b8 !important;
+    }
+
+    [data-testid="stChatMessage"] {
+        background-color: #2e1065 !important;
+        border: 1px solid #7c3aed !important;
+        border-radius: 10px !important;
+        padding: 10px !important;
+        color: #f3e8ff !important;
+    }
+    [data-testid="stChatMessage"] p, [data-testid="stChatMessage"] span, [data-testid="stChatMessage"] li {
+        color: #f3e8ff !important;
+        font-weight: 500 !important;
     }
 
     .main-title { font-size: 28px; font-weight: 800; color: #f0fdf4 !important; }
@@ -153,7 +165,6 @@ if prompt := st.chat_input(
           retriever = vectorstore.as_retriever(search_kwargs={"k": 2})
           relevant_docs = retriever.invoke(prompt)
 
-          # Extract matching snippets directly from PDF without calling any external LLM API
           extracted_snippets = "\n\n---\n\n".join(
               [
                   f"> {doc.page_content}"
