@@ -1,3 +1,4 @@
+Conversation with Gemini
 import os
 import streamlit as st
 from langchain_community.document_loaders import PyPDFLoader
@@ -112,7 +113,12 @@ for message in st.session_state.messages:
 
 
 @st.cache_resource
-def get_vectorstore(file_path):
+def get_vectorstore(file_bytes, file_name):
+  os.makedirs("data", exist_ok=True)
+  file_path = os.path.join("data", file_name)
+  with open(file_path, "wb") as f:
+    f.write(file_bytes)
+
   loader = PyPDFLoader(file_path)
   documents = loader.load()
 
@@ -142,17 +148,18 @@ if prompt := st.chat_input(
     with st.chat_message("assistant"):
       with st.spinner("Searching directly inside PDF document..."):
         try:
-          os.makedirs("data", exist_ok=True)
-          file_path = os.path.join("data", uploaded_file.name)
-          with open(file_path, "wb") as f:
-            f.write(uploaded_file.getvalue())
-
-          vectorstore = get_vectorstore(file_path)
+          vectorstore = get_vectorstore(
+              uploaded_file.getvalue(), uploaded_file.name
+          )
           retriever = vectorstore.as_retriever(search_kwargs={"k": 2})
           relevant_docs = retriever.invoke(prompt)
 
+          # Extract matching snippets directly from PDF without calling any external LLM API
           extracted_snippets = "\n\n---\n\n".join(
-              [f"> {doc.page_content}" for doc in relevant_docs]
+              [
+                  f"> {doc.page_content}"
+                  for doc in relevant_docs
+              ]
           )
           source_page = (
               relevant_docs[0].metadata.get("page", 1)
