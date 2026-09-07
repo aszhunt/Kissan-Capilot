@@ -4,6 +4,8 @@ from langchain_community.document_loaders import PyPDFLoader
 from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_community.vectorstores import FAISS
 from langchain_text_splitters import RecursiveCharacterTextSplitter
+from transformers import AutoModelForSeq2SeqLM, AutoTokenizer, pipeline
+from langchain_huggingface import HuggingFacePipeline
 
 # Page Configuration
 st.set_page_config(
@@ -55,8 +57,8 @@ st.markdown(
 with st.sidebar:
   st.markdown("### 🌾 Kissan Copilot")
   st.markdown(
-      '<div class="status-box">🟢 <b>System Status:</b> Online (No API Key'
-      " Required)<br>⚡ <b>Engine:</b> Direct Vector Search RAG</div>",
+      '<div class="status-box">🟢 <b>System Status:</b> Online (Offline Local'
+      " RAG)<br>⚡ <b>Engine:</b> FAISS + Transformers</div>",
       unsafe_allow_html=True,
   )
 
@@ -112,12 +114,7 @@ for message in st.session_state.messages:
 
 
 @st.cache_resource
-def get_vectorstore(file_bytes, file_name):
-  os.makedirs("data", exist_ok=True)
-  file_path = os.path.join("data", file_name)
-  with open(file_path, "wb") as f:
-    f.write(file_bytes)
-
+def get_vectorstore(file_path):
   loader = PyPDFLoader(file_path)
   documents = loader.load()
 
@@ -129,6 +126,22 @@ def get_vectorstore(file_bytes, file_name):
   embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
   vectorstore = FAISS.from_documents(docs, embeddings)
   return vectorstore
+
+
+@st.cache_resource
+def get_local_llm():
+  # Using a small efficient model for local text generation/summarization
+  model_id = "google/flan-t5-small"
+  tokenizer = AutoTokenizer.from_pretrained(model_id)
+  model = AutoModelForSeq2SeqLM.from_pretrained(model_id)
+  pipe = pipeline(
+      "text2text-generation",
+      model=model,
+      tokenizer=tokenizer,
+      max_length=256,
+      temperature=0.3,
+  )
+  return HuggingFacePipeline(pipeline=pipe)
 
 
 if prompt := st.chat_input(
@@ -145,30 +158,34 @@ if prompt := st.chat_input(
       st.markdown(prompt)
 
     with st.chat_message("assistant"):
-      with st.spinner("Searching directly inside PDF document..."):
+      with st.spinner("Analyzing document context and synthesizing answer..."):
         try:
-          vectorstore = get_vectorstore(
-              uploaded_file.getvalue(), uploaded_file.name
-          )
-          retriever = vectorstore.as_retriever(search_kwargs={"k": 2})
+          os.makedirs("data", exist_ok=True)
+          file_path = os.path.join("data", uploaded_file.name)
+          with open(file_path, "wb") as f:
+            f.write(uploaded_file.getvalue())
+
+          vectorstore = get_vectorstore(file_path)
+          retriever = vectorstore.as_retriever(search_kwargs={"k": 3})
           relevant_docs = retriever.invoke(prompt)
 
-          # Extract matching snippets directly from PDF without calling any external LLM API
-          extracted_snippets = "\n\n---\n\n".join(
-              [
-                  f"> {doc.page_content}"
-                  for doc in relevant_docs
-              ]
-          )
+          context_text = "\n\n".join([doc.page_content for doc in relevant_docs])
           source_page = (
               relevant_docs[0].metadata.get("page", 1)
               if relevant_docs
               else "N/A"
           )
 
-          final_output = (
-              f"**Relevant Information extracted from document:**\n\n{extracted_snippets}\n\n*🔍 **Direct Source Match:** Found in `{uploaded_file.name}` (Page {source_page}) for {region} ({crop_type}).*"
+          # Generate response using local LLM based on context
+          llm = get_local_llm()
+          rag_prompt = (
+              f"Answer the question based strictly on the context provided."
+              f" Respond in {response_lang}.\n\nContext:\n{context_text}\n\nQuestion:"
+              f" {prompt}\nAnswer:"
           )
+          answer = llm.invoke(rag_prompt)
+
+          final_output = f"{answer}\n\n*🔍 **Source Reference:** `{uploaded_file.name}` (Page {source_page}) | Region: {region} ({crop_type}).*"
 
           st.markdown(final_output)
           st.session_state.messages.append(
@@ -180,6 +197,6 @@ if prompt := st.chat_input(
 
 st.markdown(
     '<p class="disclaimer"><b>Responsible AI & Accountability Disclaimer:</b>'
-    " Direct Vector RAG search active (No API Key Required).</p>",
+    " Local Offline RAG pipeline active (Zero API cost/keys required).</p>",
     unsafe_allow_html=True,
 )
